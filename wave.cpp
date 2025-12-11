@@ -8,24 +8,14 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 
-#ifdef _WIN32
-    #include <windows.h>
-    #define CLEAR_SCREEN "cls"
-#else
-    #define CLEAR_SCREEN "clear"
-#endif
-
 using namespace std;
 
 // ANSI color codes for GitHub heatmap colors
-const string COLOR_DARK = "\033[38;2;14;17;23m";      // #0e1117
-const string COLOR_LEVEL1 = "\033[38;2;13;57;34m";    // #0d3922
-const string COLOR_LEVEL2 = "\033[38;2;26;111;77m";   // #1a6f4d
-const string COLOR_LEVEL3 = "\033[38;2;38;166;65m";   // #26a641
-const string COLOR_LEVEL4 = "\033[38;2;57;211;83m";   // #39d353
+const string COLOR_LEVEL1 = "\033[38;2;13;57;34m";
+const string COLOR_LEVEL2 = "\033[38;2;26;111;77m";
+const string COLOR_LEVEL3 = "\033[38;2;38;166;65m";
+const string COLOR_LEVEL4 = "\033[38;2;57;211;83m";
 const string COLOR_RESET = "\033[0m";
-const string BG_DARK = "\033[48;2;13;17;23m";
-const string BG_RESET = "\033[49m";
 
 const string SQUARE = "█";
 
@@ -35,25 +25,19 @@ struct TerminalSize {
 };
 
 TerminalSize getTerminalSize() {
-    #ifdef _WIN32
-        CONSOLE_SCREEN_BUFFER_INFO csbi;
-        GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-        return {csbi.srWindow.Right - csbi.srWindow.Left + 1, 
-                csbi.srWindow.Bottom - csbi.srWindow.Top + 1};
-    #else
-        struct winsize w;
-        ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-        return {w.ws_col, w.ws_row};
-    #endif
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+    return {w.ws_col, w.ws_row};
 }
 
-string getLastLaunchDate() {
-    string home = getenv("HOME") ? getenv("HOME") : ".";
-    return home + "/.terminal_last_launch";
+string getCacheFile() {
+    const char* homeDir = getenv("HOME");
+    if (!homeDir) homeDir = ".";
+    return string(homeDir) + "/.wave-cache";
 }
 
 bool isFirstLaunchOfDay() {
-    string dateFile = getLastLaunchDate();
+    string cacheFile = getCacheFile();
     auto now = chrono::system_clock::now();
     auto time = chrono::system_clock::to_time_t(now);
     tm* timeinfo = localtime(&time);
@@ -62,7 +46,7 @@ bool isFirstLaunchOfDay() {
                    to_string(1 + timeinfo->tm_mon) + "-" + 
                    to_string(timeinfo->tm_mday);
     
-    ifstream file(dateFile);
+    ifstream file(cacheFile);
     string lastDate;
     
     if (file.is_open()) {
@@ -74,8 +58,7 @@ bool isFirstLaunchOfDay() {
         }
     }
     
-    // Update the file with today's date
-    ofstream outFile(dateFile);
+    ofstream outFile(cacheFile);
     outFile << today;
     outFile.close();
     
@@ -88,48 +71,36 @@ string getColorForLevel(int level) {
         case 2: return COLOR_LEVEL2;
         case 3: return COLOR_LEVEL3;
         case 4: return COLOR_LEVEL4;
-        default: return COLOR_DARK;
+        default: return COLOR_RESET;
     }
 }
 
 void displayAnimation() {
-    system(CLEAR_SCREEN);
-    
     TerminalSize size = getTerminalSize();
-    int cols = size.width / 2;  // Account for full-width characters
-    int rows = size.height - 2;
+    int cols = size.width;
+    int rows = size.height * 2;
     
-    // Ensure reasonable minimum
     if (cols < 10) cols = 10;
     if (rows < 5) rows = 5;
     
-    // Create grid
-    vector<vector<int>> grid(rows, vector<int>(cols, 0));
+    srand(time(0));
     
-    // Animation: wave from top to bottom
+    // Print wave scrolling naturally (no clearing)
     for (int row = 0; row < rows; row++) {
         for (int col = 0; col < cols; col++) {
             int centerCol = cols / 2;
             int distFromCenter = abs(col - centerCol);
             int maxDist = centerCol;
-            int intensityLevel = max(1, 4 - (distFromCenter * 3) / maxDist);
+            int baseIntensity = max(1, 4 - (distFromCenter * 3) / maxDist);
+            int randomLevel = (rand() % 100 < 60) ? baseIntensity : max(0, baseIntensity - 1);
+            randomLevel = max(0, min(4, randomLevel));
             
-            grid[row][col] = intensityLevel;
-            
-            // Print the square
-            cout << getColorForLevel(intensityLevel) << SQUARE << COLOR_RESET;
-            cout.flush();
-            
-            this_thread::sleep_for(chrono::milliseconds(1));
+            cout << getColorForLevel(randomLevel) << SQUARE << COLOR_RESET;
         }
         cout << "\n";
+        cout.flush();
+        this_thread::sleep_for(chrono::milliseconds(100));
     }
-    
-    // Hold state
-    this_thread::sleep_for(chrono::milliseconds(200));
-    
-    // Fade out and clear
-    system(CLEAR_SCREEN);
 }
 
 int main() {
