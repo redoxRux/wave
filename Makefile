@@ -9,9 +9,8 @@ $(TARGET): $(SRC)
 	$(CXX) $(CXXFLAGS) -o $(TARGET) $(SRC)
 
 install: $(TARGET)
-	@mkdir -p ~/.local/bin
-	cp $(TARGET) ~/.local/bin/
-	@echo "✓ Installed to ~/.local/bin/wave"
+	sudo cp $(TARGET) /usr/local/bin/
+	@echo "✓ Installed to /usr/local/bin/wave"
 	@echo "Add 'wave' to your ~/.bashrc or ~/.zshrc"
 
 clean:
